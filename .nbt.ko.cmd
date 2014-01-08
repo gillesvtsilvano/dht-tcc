@@ -1,0 +1,1 @@
+cmd_/home/gilles/Codigos/tcc/modules/nbt.ko := ld -r -m elf_x86_64 -T /usr/src/kernels/3.11.8-300.fc20.x86_64/scripts/module-common.lds --build-id  -o /home/gilles/Codigos/tcc/modules/nbt.ko /home/gilles/Codigos/tcc/modules/nbt.o /home/gilles/Codigos/tcc/modules/nbt.mod.o
