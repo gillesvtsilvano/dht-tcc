@@ -11,6 +11,8 @@ int __init init_module(void){
 	printk(KERN_INFO "NBT module initializing\n");
 	nbt_create();
 
+	update_task = kthread_run(update_task_func,NULL,"kthread");
+
 	dev_add_pack(&nbt_pkt_type);
 	
 	nbt_associate();
@@ -24,8 +26,21 @@ int __init init_module(void){
 void cleanup_module(void){
 	printk(KERN_INFO "NBT module exiting\n");
 	dev_remove_pack(&nbt_pkt_type);
+	kthread_stop(update_task);
 	nbt_disassociate();
 	nbt_destroy();
+}
+
+int update_task_func(void *data){
+	while(1) {
+		printk("UPDATE\n");
+		//mdelay(UPDATE_DELAY); msleep(1);
+		msleep_interruptible(UPDATE_DELAY);
+		if (kthread_should_stop()) {
+			printk("Thread UPDATE exiting\n");
+			return 0;
+		}
+	}
 }
 
 struct nbt_msg_associate {
@@ -61,26 +76,26 @@ void nbt_craft_msg_associate(void){
 	uint8_t hlen, tlen, *p;
 
 	dev = get_dev();
-        if (!dev)
-                return;
+    if (!dev)
+            return;
 
-        hlen = LL_RESERVED_SPACE(dev);
-        tlen = dev->needed_tailroom;
-        
-        skb = alloc_skb(dev->hard_header_len + sizeof(struct nbt_msg_associate) + hlen + tlen, GFP_ATOMIC);
+    hlen = LL_RESERVED_SPACE(dev);
+    tlen = dev->needed_tailroom;
+    
+    skb = alloc_skb(dev->hard_header_len + sizeof(struct nbt_msg_associate) + hlen + tlen, GFP_ATOMIC);
 
-        skb->protocol = htons(NBT_PROTO_TYPE);
-        skb->dev = dev;
-        skb->priority = TC_PRIO_CONTROL;
-        skb_reset_network_header(skb);
-        skb_put(skb, dev->hard_header_len + sizeof(struct nbt_msg_associate));
-        p = skb->data;
-        memcpy(p, dev->broadcast, ETH_ALEN);
-        p += ETH_ALEN;
-        memcpy(p, dev->dev_addr, ETH_ALEN);
-        p += ETH_ALEN;
-        memcpy(p, &skb->protocol, 2);
-        p += 2;
+    skb->protocol = htons(NBT_PROTO_TYPE);
+    skb->dev = dev;
+    skb->priority = TC_PRIO_CONTROL;
+    skb_reset_network_header(skb);
+    skb_put(skb, dev->hard_header_len + sizeof(struct nbt_msg_associate));
+    p = skb->data;
+    memcpy(p, dev->broadcast, ETH_ALEN);
+    p += ETH_ALEN;
+    memcpy(p, dev->dev_addr, ETH_ALEN);
+    p += ETH_ALEN;
+    memcpy(p, &skb->protocol, 2);
+    p += 2;
 
 	*p = NBT_ASSOCIATE_ID;
 	if (dev_queue_xmit(skb) == NET_XMIT_SUCCESS){
@@ -97,26 +112,26 @@ void nbt_craft_msg_disassociate(void){
 	uint8_t hlen, tlen, *p;
 
 	dev = get_dev();
-        if (!dev)
-                return;
+    if (!dev)
+            return;
 
-        hlen = LL_RESERVED_SPACE(dev);
-        tlen = dev->needed_tailroom;
-        
-        skb = alloc_skb(dev->hard_header_len + sizeof(struct nbt_msg_disassociate) + hlen + tlen, GFP_ATOMIC);
+    hlen = LL_RESERVED_SPACE(dev);
+    tlen = dev->needed_tailroom;
+    
+    skb = alloc_skb(dev->hard_header_len + sizeof(struct nbt_msg_disassociate) + hlen + tlen, GFP_ATOMIC);
 
-        skb->protocol = htons(NBT_PROTO_TYPE);
-        skb->dev = dev;
-        skb->priority = TC_PRIO_CONTROL;
-        skb_reset_network_header(skb);
-        skb_put(skb, dev->hard_header_len + sizeof(struct nbt_msg_disassociate));
-        p = skb->data;
-        memcpy(p, dev->broadcast, ETH_ALEN);
-        p += ETH_ALEN;
-        memcpy(p, dev->dev_addr, ETH_ALEN);
-        p += ETH_ALEN;
-        memcpy(p, &skb->protocol, 2);
-        p += 2;
+    skb->protocol = htons(NBT_PROTO_TYPE);
+    skb->dev = dev;
+    skb->priority = TC_PRIO_CONTROL;
+    skb_reset_network_header(skb);
+    skb_put(skb, dev->hard_header_len + sizeof(struct nbt_msg_disassociate));
+    p = skb->data;
+    memcpy(p, dev->broadcast, ETH_ALEN);
+    p += ETH_ALEN;
+    memcpy(p, dev->dev_addr, ETH_ALEN);
+    p += ETH_ALEN;
+    memcpy(p, &skb->protocol, 2);
+    p += 2;
 
 	*p = NBT_DISASSOCIATE_ID;
 	if (dev_queue_xmit(skb) == NET_XMIT_SUCCESS){
@@ -127,7 +142,7 @@ void nbt_craft_msg_disassociate(void){
 }
 
 void nbt_craft_msg_update(void){
-
+	/* TODO */
 }
 
 
@@ -435,8 +450,9 @@ EXPORT_SYMBOL(nbt_destroy);
 
 struct net_device* get_dev(void){
 	struct net_device* dev = first_net_device(&init_net);
+	printk(KERN_INFO "Trying to get wlp2s0 device\n");
 	while (dev){
-		if (memcmp(dev->name, "virbr0", 6) == 0)
+		if (memcmp(dev->name, "wlp2s0", 6) == 0)
 			break;
 		dev = next_net_device(dev);
 	}

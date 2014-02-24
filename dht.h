@@ -12,15 +12,15 @@
 #define DHT_REMOVE_ID 0x02
 #define DHT_RETRIVE_ID 0x03
 #define DHT_ACK_ID 0x04
-#define DHT_RETRIVE_RESPONSE 0x05
+#define DHT_RESPONSE_ID 0x05
+#define DHT_RETRIVE_RESPONSE_ID 0x06
+#define DHT_CONFIRM_ID	0x07
 #define DHT_NONE_ID 0x09
+
 
 uint16_t seq;
 
-static struct packet_type dht_pkt_type = {
-	.type = PROTO_TYPE,
-	.func = dht_rcv,
-};
+static struct packet_type dht_pkt_type;
 
 struct dht_t {
 	struct dht_node_t* head;
@@ -35,18 +35,18 @@ struct dht_node_t{
 } dht_node_t;
 
 struct dht_msg_insert{
-	uint16_t seq;
 	uint8_t family;
 	uint32_t key;
+	uint16_t seq;
 	uint8_t data_size;
 	uint8_t data[256];
 } dht_msg_insert;
 
 
 struct dht_msg_remove {
-	uint16_t seq;
 	uint8_t family;
 	uint32_t key;
+	uint16_t seq;
 } dht_msg_remove;
 
 struct dht_msg_retrive{
@@ -56,8 +56,8 @@ struct dht_msg_retrive{
 } dht_msg_retrive;
 
 struct dht_msg_confirm {
+	uint8_t family;
 	uint16_t seq;
-//	uint8_t family;
 } dht_msg_response;
 
 
@@ -79,10 +79,10 @@ int dht_handle_retrive_response(uint8_t* data);
 void dht_craft_msg_insert(uint8_t* dst, uint8_t data_size, void* data);
 void dht_craft_msg_remove(uint8_t* dst, uint32_t key);
 void dht_craft_msg_retrive(uint8_t* dst, uint32_t key);
-void dht_craft_msg_response(uint8_t* dst, uint16_t rSeq);
+void dht_craft_msg_response(uint8_t* dst, uint16_t rSeq);		// Usado para ?????
 void dht_craft_msg_retrive_response(uint8_t* dst, uint16_t rSeq, uint8_t data_size, void* data);
 
-
+struct net_device* dev = NULL;
 
 void dht_create(void);
 void dht_destroy(void);
@@ -107,4 +107,4 @@ extern void nbt_print(void);
 extern void print_mac(uint8_t*);
 extern int nbt_remove_mac(uint8_t*);
 extern uint8_t* nbt_get_mac(uint32_t);
-extern uint32_t nbt_hash(void* info, unsigned long size);
+extern uint32_t nbt_hash_func(void* info, unsigned long size);

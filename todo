@@ -3,7 +3,8 @@ DOCUMENTARRR e ORGANIZAR
 organizar os rcv
 
 dht_craft_msg_update
+- thread funcionando
 
-nbt insert
-nbt remove
-nbt retrive
+dht insert
+dht remove
+dht retrive

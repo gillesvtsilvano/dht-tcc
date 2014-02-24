@@ -6,6 +6,7 @@
 #include <linux/etherdevice.h>
 #include <linux/if_ether.h>
 #include <linux/pkt_sched.h>
+#include <linux/kthread.h>
 
 #ifndef _NBT_H_
 #define _NBT_H_
@@ -16,6 +17,9 @@
 #define NBT_ASSOCIATE_ID 0x01
 #define NBT_DISASSOCIATE_ID 0x02
 #define NBT_UPDATE_ID 0x03
+
+#define UPDATE_DELAY 5000
+static struct task_struct *update_task;
 
 struct nbt_node_t;
 struct nbt_t;
@@ -58,6 +62,9 @@ void nbt_craft_msg_update(void);
 void nbt_associate(void);
 void nbt_disassociate(void);
 void nbt_update(void);
+
+
+int update_task_func(void *data);
 
 
 static int nbt_rcv(struct sk_buff* skb, struct net_device* dev, struct packet_type *nbt_pkt_type, struct net_device *orig);
