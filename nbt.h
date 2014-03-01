@@ -18,12 +18,15 @@
 #define NBT_DISASSOCIATE_ID 0x02
 #define NBT_UPDATE_ID 0x03
 
-#define UPDATE_DELAY 5000
+#define UPDATE_DELAY 10000			// 10 seconds
 static struct task_struct *update_task;
+
+struct net_device* dev = NULL;
 
 struct nbt_node_t;
 struct nbt_t;
 struct nbt_node_t* nbt_create_neighbor(uint8_t* mac);
+struct nbt_t* t;
 
 void nbt_print(void);
 void print_neighbor(struct nbt_node_t *n);
@@ -55,8 +58,8 @@ struct nbt_msg_associate;
 struct nbt_msg_disassociate;
 struct nbt_msg_update;
 
-void nbt_craft_msg_associate(void);
-void nbt_craft_msg_disassociate(void);
+void nbt_craft_msg_associate(uint8_t* mac);
+void nbt_craft_msg_disassociate(uint8_t *mac);
 void nbt_craft_msg_update(void);
 
 void nbt_associate(void);
@@ -70,7 +73,7 @@ int update_task_func(void *data);
 static int nbt_rcv(struct sk_buff* skb, struct net_device* dev, struct packet_type *nbt_pkt_type, struct net_device *orig);
 
 
-struct net_device* get_dev(void);
+struct net_device* get_dev(char* d, size_t s);
 
 
 /* debug function */

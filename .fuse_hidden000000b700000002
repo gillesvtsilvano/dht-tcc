@@ -1,38 +1,6 @@
 #include "nbt.h"
 
-struct nbt_msg_associate {
-	uint8_t type;
-	uint8_t mac[6];
-} *nbt_msg_associate;
-
-struct nbt_msg_disassociate {
-	uint8_t type;
-	uint8_t mac[6];
-} *nbt_msg_disassociate;
-
-struct nbt_msg_update{
-	uint8_t type;
-	uint8_t seq;
-	uint8_t idx;
-} *nbt_msg_update;
-
-struct nbt_node_t {
-	uint32_t idx;
-	uint32_t key;
-	uint8_t mac[6];
-	struct nbt_node_t *next;
-} nbt_node_t;
-EXPORT_SYMBOL(nbt_node_t);
-
-struct nbt_t{
-	struct nbt_node_t* head;
-} nbt_t;
-EXPORT_SYMBOL(nbt_t);
-
-static struct packet_type nbt_pkt_type = {
-	.type = NBT_PROTO_TYPE,
-	.func = nbt_rcv,	
-};
+struct nbt_t* t = 0;
 
 
 /*
@@ -41,17 +9,19 @@ static struct packet_type nbt_pkt_type = {
 int __init init_module(void){
 	/* init module */
 
-	char myDev[10] = "virbr0";
-	//char myDev[10] = "eth0";
+	//char myDev[10] = "virbr0";
+	char myDev[10] = "eth0";
 
 	printk(KERN_INFO "NBT module initializing\n");
 
-	dev = get_dev(myDev, strlen(myDev));
+	nbt_create();
+
 	update_task = kthread_run(update_task_func,NULL,"kthread");
+
 	dev_add_pack(&nbt_pkt_type);
 
-	// USer Code
-	nbt_create();	
+	dev = get_dev(myDev, strlen(myDev));
+	
 	nbt_associate();
 			
 	return 0;
@@ -69,19 +39,9 @@ void cleanup_module(void){
 }
 
 int update_task_func(void *data){
-	struct nbt_node_t* pt = 0;
-	
 	while(1) {
 		printk("UPDATE\n");
 		//mdelay(UPDATE_DELAY); msleep(1);
-
-		pt = t->head;
-
-		while (pt != 0){
-			nbt_craft_msg_associate(pt->mac);
-			pt = pt->next;
-		}
-
 		nbt_print();
 		msleep_interruptible(UPDATE_DELAY);
 		if (kthread_should_stop()) {
@@ -91,6 +51,19 @@ int update_task_func(void *data){
 	}
 }
 
+struct nbt_msg_associate {
+	uint8_t type;
+} *nbt_msg_associate;
+
+struct nbt_msg_disassociate {
+	uint8_t type;
+} *nbt_msg_disassociate;
+
+struct nbt_msg_update{
+	uint8_t type;
+	uint8_t seq;
+	uint8_t idx;
+} *nbt_msg_update;
 
 
 void nbt_associate(void){
@@ -98,7 +71,7 @@ void nbt_associate(void){
 }
 
 void nbt_disassociate(void){
-	nbt_craft_msg_disassociate(dev->dev_addr);
+	nbt_craft_msg_disassociate();
 }
 
 void nbt_update(void){
@@ -127,16 +100,13 @@ void nbt_craft_msg_associate(uint8_t* mac){
     p = skb->data;
     memcpy(p, dev->broadcast, ETH_ALEN);
     p += ETH_ALEN;
-    memcpy(p, dev->dev_addr, ETH_ALEN);
-    //memcpy(p, mac, ETH_ALEN);
+    //memcpy(p, dev->dev_addr, ETH_ALEN);
+    memcpy(p, mac, ETH_ALEN);
     p += ETH_ALEN;
     memcpy(p, &skb->protocol, 2);
     p += 2;
-	*p = NBT_ASSOCIATE_ID;
-	p += 1;
-	memcpy(p, mac, ETH_ALEN);
-	p += 6;
 
+	*p = NBT_ASSOCIATE_ID;
 	if (dev_queue_xmit(skb) == NET_XMIT_SUCCESS){
 		printk("craft_msg_associate(): Ok!\n");
 	} else {
@@ -145,7 +115,7 @@ void nbt_craft_msg_associate(uint8_t* mac){
 }
 
 
-void nbt_craft_msg_disassociate(uint8_t* mac){
+void nbt_craft_msg_disassociate(void){
 	struct sk_buff* skb;
 	//struct net_device* dev;
 	uint8_t hlen, tlen, *p;
@@ -171,11 +141,8 @@ void nbt_craft_msg_disassociate(uint8_t* mac){
     p += ETH_ALEN;
     memcpy(p, &skb->protocol, 2);
     p += 2;
-	*p = NBT_DISASSOCIATE_ID;
-	p += 1;
-	memcpy(p, mac, ETH_ALEN);
-    p += 6;
 
+	*p = NBT_DISASSOCIATE_ID;
 	if (dev_queue_xmit(skb) == NET_XMIT_SUCCESS){
 		printk("craft_msg_disassociate(): Ok!\n");
 	} else {
@@ -188,7 +155,10 @@ void nbt_craft_msg_update(void){
 }
 
 
-
+static struct packet_type nbt_pkt_type = {
+	.type = NBT_PROTO_TYPE,
+	.func = nbt_rcv,	
+};
 
 static int nbt_rcv(struct sk_buff* skb, struct net_device* nd, struct packet_type *nbt_pkt_type, struct net_device *orig) {
 	struct h {
@@ -196,7 +166,6 @@ static int nbt_rcv(struct sk_buff* skb, struct net_device* nd, struct packet_typ
 		uint8_t src[6];
 		uint16_t eth_t;
 		uint8_t dht_t;
-		uint8_t mac[8];
 	} *h = (struct h*) kmalloc(sizeof(struct h), GFP_ATOMIC);
 
 	skb = skb_share_check(skb, GFP_ATOMIC);
@@ -207,7 +176,14 @@ static int nbt_rcv(struct sk_buff* skb, struct net_device* nd, struct packet_typ
 		return -1;
 		
 	memcpy(h, skb->data, sizeof(struct h));
-	//	p += ETH_ALEN * 2 + 2;
+//	p += ETH_ALEN * 2 + 2;
+ 
+
+	printk("dst: %x:%x:%x:%x:%x:%x\n", 
+		h->dst[0], h->dst[1], h->dst[2], h->dst[3], h->dst[4], h->dst[5]); 
+
+	printk("dst: %x:%x:%x:%x:%x:%x\n", 
+		h->src[0], h->src[1], h->src[2], h->src[3], h->src[4], h->src[5]); 
 
 
 	printk("eth type: 0x%02x\n", h->eth_t);
@@ -216,12 +192,12 @@ static int nbt_rcv(struct sk_buff* skb, struct net_device* nd, struct packet_typ
 	switch(h->dht_t){
 		case NBT_ASSOCIATE_ID:
 			printk("Rcv(): Got Associate Id\n");
-			nbt_insert_mac(h->mac);
+			nbt_insert_mac(h->src);
 			//nbt_print();
 			break;
 		case NBT_DISASSOCIATE_ID:
 			printk("Rcv(): Got a Disassociate Id\n");
-			nbt_remove_mac(h->mac);
+			nbt_remove_mac(h->src);
 			break;
 		case NBT_UPDATE_ID:
 			break;
@@ -258,13 +234,25 @@ uint32_t nbt_hash_func(void* info, size_t size){
 }
 EXPORT_SYMBOL(nbt_hash_func);
 
+struct nbt_node_t {
+	uint32_t idx;
+	uint32_t key;
+	uint8_t mac[6];
+	struct nbt_node_t *next;
+} nbt_node_t;
+EXPORT_SYMBOL(nbt_node_t);
+
+struct nbt_t{
+	struct nbt_node_t* head;
+} nbt_t;
+EXPORT_SYMBOL(nbt_t);
 
 //struct nbt_t* nbt_create(void){
 void nbt_create(void){
 	t = (struct nbt_t*) kmalloc(sizeof(struct nbt_t), GFP_KERNEL);
 	t->head = 0;
 	
-	nbt_insert_mac(dev->dev_addr);
+	nbt_insert_mac(dev->addr);
 
 //	return t;
 }

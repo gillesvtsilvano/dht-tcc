@@ -8,19 +8,15 @@ int __init init_module(){
 	uint8_t dst[6];
 	char data[6];
 
-	char myDev[10] = "eth0";
-
 	dev = first_net_device(&init_net);
 	while (dev){
-		if (memcmp(dev->name, myDev, 6) == 0)
+		if (memcmp(dev->name, "wlp2s0", 6) == 0)
 			break;
 		dev = next_net_device(dev);
 	}
 	
-	if (!dev) { 
-		printk(KERN_INFO "%s not found! Now Exiting.\n", myDev);	
-		return 0;
-	}
+	if (!dev)
+		return 1;
 	
 	printk(KERN_INFO "DHT module initializing\n");
 
@@ -35,7 +31,6 @@ int __init init_module(){
 
 	dev_add_pack(&dht_pkt_type);
 
-	printk("Main(): Inserting data: %s, key: ");
 	dht_craft_msg_insert(dst, 6, data);
 
 	dht_craft_msg_remove(dst, nbt_hash_func(data, 6));
@@ -97,7 +92,6 @@ void dht_craft_msg_insert(uint8_t* dst, uint8_t data_size, void* data){
 	// Alocação de um 'tail' caso seja necessário
 	tlen = dev->needed_tailroom;
 
-	printk("Sizeof SKB = %zu\n", dev->hard_header_len + sizeof(struct dht_msg_insert) + hlen + tlen);
 	skb = alloc_skb(dev->hard_header_len + sizeof(struct dht_msg_insert) + hlen + tlen, GFP_ATOMIC);
 
 	skb->protocol = htons(PROTO_TYPE);
@@ -120,12 +114,10 @@ void dht_craft_msg_insert(uint8_t* dst, uint8_t data_size, void* data){
 	msg->family = DHT_INSERT_ID;
 	msg->key = nbt_hash_func(data, data_size);
 	msg->data_size = data_size;
-	memcpy(msg->data, "\0", 256);
 	memcpy(msg->data, data, data_size);
 
 	memcpy(p, msg, sizeof(struct dht_msg_insert));
-	printk("Sizeof struct dht_msg_insert = %zu\n", sizeof(struct dht_msg_insert));
-
+	
 	ret = dev_queue_xmit(skb);
 	if (ret == NET_XMIT_SUCCESS)
 		printk("craft_msg_insert(): Ok!\n");
@@ -167,9 +159,9 @@ void dht_craft_msg_remove(uint8_t* dst, uint32_t key){
 	
 	ret = dev_queue_xmit(skb);
 	if (ret == NET_XMIT_SUCCESS)
-		printk("craft_msg_remove(): Ok!\n");
+		printk("craft_msg_insert(): Ok!\n");
 	else
-		printk("craft_msg_remove(): Fail!\n");
+		printk("craft_msg_insert(): Fail!\n");
 }
 
 void dht_craft_msg_retrive(uint8_t* dst, uint32_t key){
@@ -328,8 +320,6 @@ static int dht_rcv(struct sk_buff* skb, struct net_device* dev, struct packet_ty
 }
 
 int dht_handle_insert(uint8_t* data){
-	struct dht_msg_insert* msg = (struct dht_msg_insert*) data;
-
 	
 	return 0;
 }
@@ -357,6 +347,7 @@ void dht_insert(uint8_t app, size_t dsize, void* d) {
 	//char* k = strsub(d, ksize);
 	uint32_t new_hash = nbt_hash_func(d, dsize);
 	
+	//printk("dht_insert(): hash of %s = %u\n", k, (unsigned int) new_hash); 
 	pt = t->head;
 	ant = 0;
 	
@@ -364,7 +355,7 @@ void dht_insert(uint8_t app, size_t dsize, void* d) {
 	newbie->key = new_hash;
 	//newbie->type = app;
 	newbie->family = app;
-	//newbie->key_size = ksize;
+//	newbie->key_size = ksize;
 	newbie->data = kmalloc(dsize, GFP_KERNEL);
 	memcpy(newbie->data, d, dsize);
 	newbie->next = 0;
@@ -375,7 +366,7 @@ void dht_insert(uint8_t app, size_t dsize, void* d) {
 		return;
 	}
 		
-	//printk(KERN_INFO "dht_insert(): Searching a place to put the new node\n");
+//	printk(KERN_INFO "dht_insert(): Searching a place to put the new node\n");
 	
 	if (pt->key > new_hash){
 		newbie->next = pt;
