@@ -1009,6 +1009,7 @@ deps_/home/gilles/Codigos/tcc/dht-tcc/dht.o := \
   include/linux/unaligned/access_ok.h \
   include/linux/unaligned/generic.h \
   /usr/src/linux-headers-3.13.0-12-generic/include/uapi/linux/pkt_sched.h \
+  include/linux/kthread.h \
 
 /home/gilles/Codigos/tcc/dht-tcc/dht.o: $(deps_/home/gilles/Codigos/tcc/dht-tcc/dht.o)
 

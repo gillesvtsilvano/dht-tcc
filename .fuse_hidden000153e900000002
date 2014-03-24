@@ -1,0 +1,35 @@
+#!/bin/bash
+
+script_name=$0
+
+modules="nbt.ko dht.ko"
+
+function main
+{
+	echo "echo { $modules }`"
+}
+
+function usage
+{
+	#echo "usage: $script_name [[-f file ] | [-h]]"
+	echo "usage: TODO"
+}
+
+
+##### Main
+
+interactive=
+
+while [ "$1" != "" ]; do
+    case $1 in
+        -f | --file )           shift
+                                ;;
+        -h | --help )           usage
+                                exit
+                                ;;
+        * )                     main
+                                exit 1
+    esac
+    shift
+done
+

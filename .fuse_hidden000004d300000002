@@ -34,34 +34,36 @@ static struct packet_type nbt_pkt_type = {
 	.func = nbt_rcv,	
 };
 
-static const struct file_operations proc_file_fops = {
-	.owner = THIS_MODULE,
-	/*.open = nbt_open_callback,*/
-	.write  = nbt_write_callback,
-	.read  = nbt_read_callback,
-	/*.llseek = nbt_llseek_callback,*/
-	/*.release = nbt_release_callback,*/
-};
 
 /*
  * Função de inicialização do módulo
  */ 
 int __init init_module(void){
+	/* init module */
 
 	//char myDev[10] = "virbr0";
 	char myDev[10] = "eth0";
 
+	printk(KERN_INFO "NBT module initializing\n");
+
 	dev = get_dev(myDev, strlen(myDev));
 
 	if(!dev){
+		printk(KERN_INFO "init_module(): Device %s not found. Trying to get another device.\n", myDev);
 		dev = first_net_device(&init_net);
+
+		// Test if dev is null or anything else that should probably crash the module and exit the module
+
+		printk(KERN_INFO "init_module(): Using %s device.", dev->name);
 	}
 
-	nbt_proc_entry = proc_create("nbt", 0644, NULL, &proc_file_fops);
-
+	update_task = kthread_run(update_task_func, NULL, "kthread");
 	dev_add_pack(&nbt_pkt_type);
+
+	// USer Code
 	
-	nbt_create();
+	nbt_create();	
+	nbt_associate();
 
 	return 0;
 }
@@ -70,111 +72,60 @@ int __init init_module(void){
  * Função de remoção do módulo
  */
 void cleanup_module(void){
-	remove_proc_entry("nbt", 0);
+	printk(KERN_INFO "NBT module exiting\n");
 	dev_remove_pack(&nbt_pkt_type);
-	nbt_disassociate();	
+	kthread_stop(update_task);
+	nbt_disassociate();
 	nbt_destroy();
 }
 
-static ssize_t nbt_write_callback(struct file *fp, const char *buffer, size_t length, loff_t * offset){
-	// TODO
-	return 0;
-}
+int update_task_func(void *data){
+	while(1) {
+		printk("UPDATE\n");
+		//mdelay(UPDATE_DELAY); msleep(1);
 
-static ssize_t nbt_read_callback(struct file *fp, char *buffer, size_t length, loff_t * offset){
-	int bytes_read = 0;
-	char* ptmsg = 0;
+		nbt_update();
+		nbt_print();
 
-	memset(msg_buffer, 0, MSG_BUFFER_SIZE);
-	sprintf(msg_buffer, "%s\n%s\n", NBT_MSG_HEADER, nbt_print());
-	//printk("nbt_read_callback(): %s(%zu)\n", msg_buffer, strlen(msg_buffer));
-
-	ptmsg = msg_buffer;
-	/* If we're at the end of the message, return 0 signifying end of file */
-	if (*ptmsg == 0) return 0;
-
-	/* Actually put the data into the buffer */
-	while (length && *ptmsg != 0)  {
-		//printk("nbt_read_callback(): 2\n");
-
-		/* The buffer is in the user data segment, not the kernel segment;
-		 * assignment won't work.  We have to use put_user which copies data from
-		 * the kernel data segment to the user data segment. */
-
-		//put_user(*(ptmsg++), buffer++);
-
-		length--;
-		bytes_read++;
-    }
-	/* Most read functions return the number of bytes put into the buffer */
-	return bytes_read;
-}
-
-int update_task_func(void* data){
-	while(!kthread_should_stop()) {
-		if (nbt_table != 0) {
-			nbt_update();
-			//printk("############# NBT ##############\n");
-			//nbt_print();
-			//printk("###############################\n");
-		}
 		msleep_interruptible(UPDATE_DELAY);
+		if (kthread_should_stop()) {
+			printk("Thread UPDATE exiting\n");
+			return 0;
+		}
 	}
-	return 0;
 }
+
+
 
 void nbt_associate(void){
-	if (!dev)
-		return;
-	if (!nbt_table)
-		return;
-
-	nbt_insert_mac(dev->dev_addr);
 	nbt_craft_msg_associate(dev->dev_addr);
 }
 EXPORT_SYMBOL(nbt_associate);
 
 void nbt_disassociate(void){
-	if (!dev)
-		return;
-	if (!nbt_table)
-		return;
-
-	nbt_remove_mac(dev->dev_addr);
 	nbt_craft_msg_disassociate(dev->dev_addr);
 }
 EXPORT_SYMBOL(nbt_disassociate);
 
 void nbt_update(void){
-	if (nbt_table != 0)
-		nbt_craft_msg_update();
+	nbt_craft_msg_update();
 }
 EXPORT_SYMBOL(nbt_update);
 
 
 void nbt_craft_msg_associate(uint8_t* mac){
-	struct sk_buff* skb = 0;
-	uint8_t hlen, tlen, *p = 0;
+	struct sk_buff* skb;
+	//struct net_device* dev;
+	uint8_t hlen, tlen, *p;
 
-	if (nbt_table == 0){
-		return;
-	}
-	if (nbt_table->head == 0){
-		return;
-	}
-
-	if (mac == 0){
-		return;
-	}
-
+	//dev = get_dev();
     if (!dev)
             return;
- 
+
     hlen = LL_RESERVED_SPACE(dev);
     tlen = dev->needed_tailroom;
     
     skb = alloc_skb(dev->hard_header_len + sizeof(struct nbt_msg_associate) + hlen + tlen, GFP_ATOMIC);
-
 
     skb->protocol = htons(NBT_PROTO_TYPE);
     skb->dev = dev;
@@ -192,16 +143,22 @@ void nbt_craft_msg_associate(uint8_t* mac){
 	*p = NBT_ASSOCIATE_ID;
 	p += 1;
 	memcpy(p, mac, ETH_ALEN);
-	p += ETH_ALEN;
+	p += 6;
 
-	dev_queue_xmit(skb);
+	if (dev_queue_xmit(skb) == NET_XMIT_SUCCESS){
+		printk("craft_msg_associate(): Ok!\n");
+	} else {
+		printk("craft_msg_associate(): Fail!\n");
+	}
 }
 
 
 void nbt_craft_msg_disassociate(uint8_t* mac){
 	struct sk_buff* skb;
+	//struct net_device* dev;
 	uint8_t hlen, tlen, *p;
 
+	//dev = get_dev();
     if (!dev)
             return;
 
@@ -227,20 +184,25 @@ void nbt_craft_msg_disassociate(uint8_t* mac){
 	memcpy(p, mac, ETH_ALEN);
     p += 6;
 
-	dev_queue_xmit(skb);
+	if (dev_queue_xmit(skb) == NET_XMIT_SUCCESS){
+		printk("craft_msg_disassociate(): Ok!\n");
+	} else {
+		printk("craft_msg_disassociate(): Fail!\n");
+	}
 }
 
 void nbt_craft_msg_update(void){
-		struct nbt_node_t* pt = 0;
-		if (nbt_table == 0)
+		struct nbt_node_t* pt;
+		if (t == 0)
 			return;
 
-		pt = nbt_table->head;
+		pt = t->head;
 
 		while (pt != 0){
 			nbt_craft_msg_associate(pt->mac);
 			pt = pt->next;
 		}
+
 }
 
 static int nbt_rcv(struct sk_buff* skb, struct net_device* nd, struct packet_type *nbt_pkt_type, struct net_device *orig) {
@@ -250,8 +212,7 @@ static int nbt_rcv(struct sk_buff* skb, struct net_device* nd, struct packet_typ
 		uint16_t eth_t;
 		uint8_t dht_t;
 		uint8_t mac[8];
-	} *h = NULL;
-	//} *h = (struct h*) kmalloc(sizeof(struct h), GFP_ATOMIC);
+	} *h = (struct h*) kmalloc(sizeof(struct h), GFP_ATOMIC);
 
 	skb = skb_share_check(skb, GFP_ATOMIC);
 	if (!skb)
@@ -259,66 +220,57 @@ static int nbt_rcv(struct sk_buff* skb, struct net_device* nd, struct packet_typ
 
 	if (!skb_push(skb, ETH_ALEN*2 + 2))
 		return -1;
-
-	h = (struct h*) skb->data;
-	//memcpy(h, skb->data, sizeof(struct h));
+		
+	memcpy(h, skb->data, sizeof(struct h));
 	//	p += ETH_ALEN * 2 + 2;
 
+
+	printk("eth type: 0x%02x\n", h->eth_t);
+	printk("dht type: 0x%02x\n", h->dht_t);
+	
 	switch(h->dht_t){
 		case NBT_ASSOCIATE_ID:
+			printk("Rcv(): Got Associate Id\n");
 			if (nbt_insert_mac(h->mac) == 0){ // If it succeeds
 				nbt_craft_msg_update();
 			}
+			nbt_print();
 			break;
 		case NBT_DISASSOCIATE_ID:
+			printk("Rcv(): Got a Disassociate Id\n");
 			if (nbt_remove_mac(h->mac) == 0){
 				nbt_craft_msg_update();
 			}
 			break;
 		case NBT_UPDATE_ID:
-
 			break;
 		default:
 			break;
 	}
-	kfree(h);
-	h = 0;
+	
 	return 0;	
 }
 
 int maccmp(uint8_t* mac1, uint8_t* mac2){
 	int i = 0;
-	uint8_t *m1 = 0, *m2 = 0;
-	if (mac1 == 0){
-		return -1;
-	} 
-	if (mac2 == 0){
-		return 1;
-	}
-
-	m1 = mac1;
-	m2 = mac2;
-
-	for (; i < 6; ++i, ++m1, ++m2){
-		if (*m1 > *m2 || *m1 < *m2){
-		       	return *m1 - *m2;
+	for (; i < 6; ++i, ++mac1, ++mac2){
+		if (*mac1 > *mac2 || *mac1 < *mac2){
+		       	return *mac1 - *mac2;
 		}
 	}
 	/* equals */
 	return 0;
 }
-EXPORT_SYMBOL(maccmp);
 
 uint32_t nbt_hash_func(void* info, size_t size){
 	int i = 0;
 	uint32_t sum = 0;
 	uint8_t* c = info;
-
-	if (info == 0 || size == 0){
+	if (info == 0){
 		return 0;
 	}
-
 	for(; i < size; ++i, ++c){
+		//printk(KERN_INFO "nbt.ko: nbt_key(): %u + %u\n", *c, sum);
 		sum += *c;
 	}
 	return sum;
@@ -328,83 +280,65 @@ EXPORT_SYMBOL(nbt_hash_func);
 
 //struct nbt_t* nbt_create(void){
 void nbt_create(void){
-	if (!nbt_table) {
-		nbt_table = (struct nbt_t*) kmalloc(sizeof(struct nbt_t), GFP_KERNEL);
-		nbt_table->head = 0;
+	t = (struct nbt_t*) kmalloc(sizeof(struct nbt_t), GFP_KERNEL);
+	t->head = 0;
+	
+	nbt_insert_mac(dev->dev_addr);
 
-		nbt_insert_mac(dev->dev_addr);
-
-		update_task = kthread_run(update_task_func, NULL, "nbt_update_task");
-	}
+//	return t;
 }
 EXPORT_SYMBOL(nbt_create);
 
 uint8_t* nbt_get_mac(uint32_t key){
-	struct nbt_node_t* pt = 0;
+	struct nbt_node_t* pt = t->head;
 	struct nbt_node_t* ant = 0;	
+
+	if (t == 0)
+		return 0;
+
+	if (t->head->key == pt->key){
+		return pt->mac;
+	}
 	
-	if (!nbt_table) {
-		return 0;
-	}
-
-	if (!nbt_table->head){
-		return 0;
-	}
-
-	pt = nbt_table->head;
-
-	if (pt->key > key){
-		while (pt){
-			ant = pt;
-			pt = pt->next;
-		}
-		return ant->mac;
-	}
-
 	ant = pt;
 	pt = pt->next;
 
-	while (pt){
+	while (pt != 0){
 		if (pt->key > key){
 			return ant->mac;
 		}
 		ant = pt;
 		pt = pt->next;
 	}
-	return ant->mac;
+	return 0;
 }
 EXPORT_SYMBOL(nbt_get_mac);
 
 int nbt_remove_neighbor(uint8_t* mac){
-	struct nbt_node_t* pt = 0;
-	struct nbt_node_t* ant = 0;
+	struct nbt_node_t* pt;
+	struct nbt_node_t* ant;
 	
-	if (nbt_table == 0){
+	if (t == 0 || mac == 0)
 		return -2;
-	}
-	if (mac == 0){
-		return -2;
-	}
+	
+	printk(KERN_INFO "Remove:\tRemoving neighbor.\n");
 
-	pt = nbt_table->head;
+	pt = t->head;
 
-	if (pt == 0){
+	if (pt == 0)
 		return -3;
-	}
 
-	if (maccmp(pt->mac, mac) == 0){
-		nbt_table->head = pt->next;
+	if (!maccmp(pt->mac, mac)){
+		t->head = pt->next;
 		kfree(pt);
-		pt = 0;
 		return 0;
 	}
 	ant = pt;
 	pt = pt->next;
 	while (pt != 0){
-		if (maccmp(pt->mac, mac) == 0){
+		if (!maccmp(pt->mac, mac)){
 			ant->next = pt->next;
 			kfree(pt);
-			pt = 0;
 			return 0;
 		}
 		ant = pt;
@@ -414,19 +348,19 @@ int nbt_remove_neighbor(uint8_t* mac){
 }
 
 int nbt_insert_neighbor(struct nbt_node_t* n){
-	struct nbt_node_t* pt = 0;
-	struct nbt_node_t* ant = 0;
+	struct nbt_node_t* pt = t->head;
+	struct nbt_node_t* ant;
 
-	if (nbt_table == 0 || n == 0)
+	if (t == 0 || n == 0)
 		return -1;	/* null pointer */
 
-	pt = nbt_table->head;
 
 	/* 
 	 * When the list is empty, the new node will be inserted as a new head
 	 */	
 	if (pt == 0){
-		nbt_table->head = n;
+		t->head = n;
+		printk(KERN_INFO "Insert:\tTable is empty. Creating a new head.\n");
 		return 0;
 	}
 
@@ -438,24 +372,27 @@ int nbt_insert_neighbor(struct nbt_node_t* n){
 	 * If the new node has...
 	 */
 	if (n->idx < pt->idx){
-		nbt_table->head = n;
+		t->head = n;
 		n->next = pt;
 		return 0;
 	} else if(n->idx == pt->idx) {
 		if (n->key < pt->key){
-			nbt_table->head = n;
+			t->head = n;
 			n->next = pt;
 			return 0;
 		} else if (n->key == pt->key) {
 			if (maccmp(n->mac, pt->mac) < 0){
-				nbt_table->head = n;
+				t->head = n;
 				n->next = pt;
 				return 0;
 			} else if (maccmp(n->mac, pt->mac) > 0){
+				/* } else if (maccmp(n->mac, pt->mac) == 0) { */
+				/* n->idx += 1 % UINT32_MAX; */
 				n->idx += 1 % MAX_SIZE;
 				n->next = 0;
 				return nbt_insert_neighbor(n);				
 			} else {
+				printk("Mac are equals\n");
 				return 1;
 				// Equals
 			}
@@ -488,10 +425,13 @@ int nbt_insert_neighbor(struct nbt_node_t* n){
 							n->next = pt;
 							return 0;
 						} else if (maccmp(n->mac, pt->mac) > 0){
+							/* } else if (maccmp(n->mac, pt->mac) == 0){ */
+							/* n->idx += 1 % UINT32_MAX; */
 							n->idx += 1 % MAX_SIZE;
 							n->next = 0;
 							return nbt_insert_neighbor( n);
 						} else {
+							printk("Mac are equals\n");
 							return 1;
 						}	
 					} else {
@@ -511,8 +451,8 @@ int nbt_insert_neighbor(struct nbt_node_t* n){
 }
 
 int nbt_insert_mac(uint8_t* mac){
-	struct nbt_node_t* n = 0;
-	if (nbt_table == 0 || mac == 0)
+	struct nbt_node_t* n;
+	if (t == 0 || mac == 0)
 		return -1;	/* null pointer */
 	n = nbt_create_neighbor(mac);
 
@@ -522,21 +462,17 @@ int nbt_insert_mac(uint8_t* mac){
 EXPORT_SYMBOL(nbt_insert_mac);
 
 int nbt_remove_mac(uint8_t* mac){
-	return nbt_remove_neighbor(mac);
+	return nbt_remove_neighbor( mac);
 }
 EXPORT_SYMBOL(nbt_remove_mac);
 
 struct nbt_node_t* nbt_create_neighbor(uint8_t* mac){
-	struct nbt_node_t* newbie = 0;
-	uint8_t* m = mac;
+	struct nbt_node_t* newbie = (struct nbt_node_t*) kmalloc(sizeof( struct nbt_node_t), GFP_KERNEL);
 	int i = 0;
 
-	newbie = (struct nbt_node_t*) kmalloc(sizeof( struct nbt_node_t), GFP_KERNEL);
-
 	newbie->key = newbie->idx = nbt_hash_func(mac, 6);
-
-	for (; i < 6; ++i, ++m){
-		newbie->mac[i] = *m;
+	for (; i < 6; ++i, ++mac){
+		newbie->mac[i] = *mac;
 	}
 	newbie->next = 0;
 
@@ -547,29 +483,24 @@ void nbt_destroy(){
 	struct nbt_node_t* pt = 0;
 	struct nbt_node_t* target = 0;
 
-	if (nbt_table == 0) {
+	if (t == 0)
 		return;
-	}
 
-	if (update_task)
-		kthread_stop(update_task);
-
-	pt = nbt_table->head;
+	pt = t->head;
 
 	while (pt != 0){
 		target = pt;
 		pt = pt->next;
 		kfree(target);
-		target = 0;
 	}
 
-	kfree(nbt_table);
-	nbt_table = 0;
+	kfree(t);
 }
 EXPORT_SYMBOL(nbt_destroy);
 
 struct net_device* get_dev(char* d, size_t s){
 	struct net_device* i = first_net_device(&init_net);
+	printk(KERN_INFO "Trying to get eth0 device\n");
 	while (i){
 		if (memcmp(i->name, d, s) == 0)
 			break;
@@ -580,42 +511,43 @@ struct net_device* get_dev(char* d, size_t s){
 EXPORT_SYMBOL(get_dev);
 
 /* debug functions */
-char* print_mac(uint8_t* mac){
-	uint8_t *aux = 0;
-	char* m = (char*) kmalloc(ETH_ALEN + sizeof(char)*5 + 1, GFP_KERNEL);
-
-	aux = mac;
+void print_mac(uint8_t* mac){
+	uint8_t *aux = mac;
 	if (mac == 0){
-		sprintf(m, "%s", "--:--:--:--:--:--");
-	} else {
-		sprintf(m, "%02x:%02x:%02x:%02x:%02x:%02x",
-			*aux, *(aux + 1), *(aux + 2), *(aux + 3), *(aux + 4), *(aux + 5));
+		printk(KERN_INFO "Print_mac: null\n");
+		return;
 	}
-	return m;
+	printk("Print_mac(): %x:%x:%x:%x:%x:%x\n",
+			*aux, *(aux + 1), *(aux + 2), *(aux + 3), *(aux + 4), *(aux + 5));
 }
 EXPORT_SYMBOL(print_mac);
 
-char* print_neighbor(struct nbt_node_t *n){
-	char* ret = (char*) kmalloc(sizeof(char) * (12 + ETH_ALEN + sizeof(char)*5 + 1), GFP_KERNEL);
-	sprintf(ret, "%05u\t%05u\t%s", n->idx, n->key, print_mac(n->mac));
-	return ret;
+void print_neighbor(struct nbt_node_t *n){
+	char s = ':';	//mac separator
+	printk(KERN_INFO "%s%010u\t%s%010u\t%s%02x%c%02x%c%02x%c%02x%c%02x%c%02x\t%s%s\n",
+			"IDX: ", n->idx, 
+			"KEY: ", n->key,
+			"MAC: ", n->mac[0], s, n->mac[1], s, n->mac[2], s, n->mac[3], s, n->mac[4], s, n->mac[5],
+			"NEXT? ", n->next == 0 ? "null" : "yes");
 }
 
-char* print_neighbors(struct nbt_node_t *n){
+void print_neighbors(struct nbt_node_t *n){
 	struct nbt_node_t* pt = n;
-	char* ret = (char*) kmalloc(sizeof(char) * 256, GFP_KERNEL);
-
-	while (pt){
-		sprintf(ret, "%s%s\n", ret, print_neighbor(pt));
+	
+	while (pt != 0){
+		print_neighbor(pt);
 		pt = pt->next;
 	}
-	return ret;
 }
 
-char* nbt_print(void){
-	if (nbt_table)
-		return print_neighbors(nbt_table->head);
-	else
-		return "(null)";
+void nbt_print(){
+	printk(KERN_INFO "####################################\n");
+	if (t == 0){
+		printk ("NULL\n");
+		printk(KERN_INFO "####################################\n");
+		return;
+	}
+	print_neighbors(t->head);
+	printk(KERN_INFO "####################################\n");
 }
 EXPORT_SYMBOL(nbt_print);

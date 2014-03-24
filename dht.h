@@ -6,6 +6,15 @@
 #include <linux/etherdevice.h>
 #include <linux/if_ether.h>
 #include <linux/pkt_sched.h>
+#include <linux/kthread.h>
+#include <asm/errno.h>
+
+#ifndef _DHT_H_
+#define _DHT_H_
+
+#define DHT_MODULE_LICENSE "GPL"
+#define DHT_MODULE_AUTHOR "Gilles V. T. Silvano <gillesvtsilvano@gmail.com"
+#define DHT_MODULE_DESC   "TODO"
 
 #define PROTO_TYPE 0x0808
 #define DHT_INSERT_ID 0x01
@@ -17,90 +26,111 @@
 #define DHT_CONFIRM_ID	0x07
 #define DHT_NONE_ID 0x09
 
+#define UPDATE_DELAY 10000
 
+// Outdated
 uint16_t seq;
 
+
+struct net_device* dev = NULL;
 static struct packet_type dht_pkt_type;
+static struct task_struct *update_task = NULL;
 
 struct dht_t {
 	struct dht_node_t* head;
 } dht_t;
 
 struct dht_node_t{
-	uint8_t family;
-	uint32_t key;
-	uint8_t data_size;
+	uint8_t app;
+	uint32_t idx;
+	void* key;
+	uint8_t key_size;
 	void* data;
+	uint8_t data_size;
 	struct dht_node_t* next;
 } dht_node_t;
 
+
+/* Structures that handle message information to be sent and received */
 struct dht_msg_insert{
-	uint8_t family;
-	uint32_t key;
-	uint16_t seq;
-	uint8_t data_size;
+	uint8_t type;
+	uint8_t app;
+	uint32_t idx;
+	uint8_t key[256];
+	uint8_t key_size;
 	uint8_t data[256];
+	uint8_t data_size;
 } dht_msg_insert;
 
 
 struct dht_msg_remove {
-	uint8_t family;
-	uint32_t key;
-	uint16_t seq;
+	uint8_t type;
+	uint8_t app;
+	uint32_t idx;
+	uint8_t key[256];
+	uint8_t key_size;
 } dht_msg_remove;
 
+// OUtdated
 struct dht_msg_retrive{
-	uint16_t seq;
 	uint8_t family;
+	uint16_t seq;
 	uint32_t key;
 } dht_msg_retrive;
 
 struct dht_msg_confirm {
 	uint8_t family;
 	uint16_t seq;
+	uint8_t code;
 } dht_msg_response;
 
 
 struct dht_msg_retrive_response {
-	uint16_t seq;
 	uint8_t family;
+	uint16_t seq;
 	uint32_t key;
 	uint8_t data_size;
 	uint8_t data[256];
 };
 
 
-int dht_handle_insert(uint8_t* data);
-int dht_handle_remove(uint8_t* data);
-int dht_handle_retrive(uint8_t* data, uint8_t* data_size, void* ret_data);
-int dht_handle_response(uint8_t* data);
-int dht_handle_retrive_response(uint8_t* data);
+/* Funtions that handle data being sent from the node
+ * These functions check if the data has to be send to another node
+ * or if it needs to be stored localy
+ */
+int dht_handle_insert(void* msg);
+int dht_handle_remove(void* msg);
+// Outdated
+int dht_handle_retrive(void* data);
+int dht_handle_response(void* data);
+int dht_handle_retrive_response(void* data);
 
-void dht_craft_msg_insert(uint8_t* dst, uint8_t data_size, void* data);
-void dht_craft_msg_remove(uint8_t* dst, uint32_t key);
+/* Functions that crafts new messages and try to send these packets though
+ * the device configured in dht_create()
+ */
+void dht_craft_msg_insert(uint8_t* dst, uint8_t app, void* key, uint8_t key_size, void* data, uint8_t data_size);
+void dht_craft_msg_remove(uint8_t* dst, uint8_t app, void* key, uint8_t key_size);
+// OUtdated
 void dht_craft_msg_retrive(uint8_t* dst, uint32_t key);
 void dht_craft_msg_response(uint8_t* dst, uint16_t rSeq);		// Usado para ?????
 void dht_craft_msg_retrive_response(uint8_t* dst, uint16_t rSeq, uint8_t data_size, void* data);
 
-struct net_device* dev = NULL;
-
 void dht_create(void);
 void dht_destroy(void);
-void dht_insert(uint8_t app, size_t dsize, void* d);
-void dht_remove(uint32_t _key);
-void* dht_get_data(uint32_t _key);
-void* dht_get_key(uint32_t _key);
+int dht_insert(uint8_t app, void* key, uint8_t key_size, void* data, uint8_t data_size);
+int dht_remove(uint8_t app, void* key, uint8_t key_size);
+void dht_check(void);
 
-static struct packet_type dht_pkt_type;
+int update_task_func(void* data);
 
 static int dht_rcv(struct sk_buff* skb, struct net_device* dev, struct packet_type *dht_pkt_type, struct net_device* orig);
-
-// Auxiliar functions
-char* strsub(const char* s, size_t n);
 
 // Debug functions
 void dht_print(void);
 void dht_print_node(struct dht_node_t*);
+
+
+/* Nbt functions defined at nbt.h */
 
 extern int nbt_insert_mac(uint8_t*);
 extern void nbt_print(void);
@@ -108,3 +138,16 @@ extern void print_mac(uint8_t*);
 extern int nbt_remove_mac(uint8_t*);
 extern uint8_t* nbt_get_mac(uint32_t);
 extern uint32_t nbt_hash_func(void* info, unsigned long size);
+extern struct net_device* get_dev(char* d, size_t s);
+extern void nbt_create(void);
+extern void nbt_destroy(void);
+extern void nbt_associate(void);
+extern void nbt_disassociate(void);
+extern void nbt_update(void);
+extern int maccmp(uint8_t* mac1, uint8_t* mac2);
+
+MODULE_LICENSE(DHT_MODULE_LICENSE);
+MODULE_AUTHOR(DHT_MODULE_AUTHOR);
+MODULE_DESCRIPTION(DHT_MODULE_DESC);
+
+#endif /* _DHT_H_ */

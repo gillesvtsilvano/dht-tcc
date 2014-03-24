@@ -75,15 +75,15 @@ void dht_check(void){
 	struct dht_node_t* pt = NULL, *ant = NULL, *target = NULL;
 	uint8_t* addr = NULL;
 
-	if (!dev){
-		return;
-	}
-
 	if (!t) {
 		return;
 	}
 	
 	if (!t->head){
+		return;
+	}
+
+	if (!dev){
 		return;
 	}
 
@@ -95,17 +95,17 @@ void dht_check(void){
 
 			target = t->head;
 			t->head = t->head->next;
-			
 			kfree(target);
 			target = NULL;
 
 			pt = t->head;
-			/* ant = NULL; */
 		} else {
 			pt = t->head->next;
 			ant = t->head;
 		}
 	}
+
+	
 
 	while(pt){
 		addr = nbt_get_mac(pt->idx);
@@ -130,7 +130,6 @@ void dht_check(void){
 
 				continue;
 			}
-
 		ant = pt;
 		pt = pt->next;
 	}

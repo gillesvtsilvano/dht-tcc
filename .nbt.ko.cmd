@@ -1,1 +1,1 @@
-cmd_/home/gilles/Codigos/tcc/dht-tcc/nbt.ko := ld -r -m elf_x86_64 -T /usr/src/linux-headers-3.13.0-12-generic/scripts/module-common.lds --build-id  -o /home/gilles/Codigos/tcc/dht-tcc/nbt.ko /home/gilles/Codigos/tcc/dht-tcc/nbt.o /home/gilles/Codigos/tcc/dht-tcc/nbt.mod.o
+cmd_/home/gilles/Codigos/tcc/dht-tcc/nbt.ko := ld -r -m elf_x86_64 -T /usr/src/linux-headers-3.13.0-18-generic/scripts/module-common.lds --build-id  -o /home/gilles/Codigos/tcc/dht-tcc/nbt.ko /home/gilles/Codigos/tcc/dht-tcc/nbt.o /home/gilles/Codigos/tcc/dht-tcc/nbt.mod.o

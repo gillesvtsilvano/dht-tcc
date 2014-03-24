@@ -1,0 +1,7 @@
+#!/bin/bash
+
+scp -r `pwd` gilles@ubuntu-a:~ 
+ssh gilles@ubuntu-a "cd dht-tcc; make clean"
+ssh gilles@ubuntu-a "cd dht-tcc; make"
+scp -r `pwd` gilles@ubuntu-b:~
+ssh gilles@ubuntu-b "cd dht-tcc; make"
