@@ -1,1 +1,1 @@
-cmd_/home/gilles/Codigos/tcc/dht-tcc/dht.ko := ld -r -m elf_x86_64 -T /usr/src/linux-headers-3.13.0-18-generic/scripts/module-common.lds --build-id  -o /home/gilles/Codigos/tcc/dht-tcc/dht.ko /home/gilles/Codigos/tcc/dht-tcc/dht.o /home/gilles/Codigos/tcc/dht-tcc/dht.mod.o
+cmd_/home/gilles/dht-tcc/dht.ko := ld -r -m elf_x86_64 -T /usr/src/linux-headers-3.11.0-18-generic/scripts/module-common.lds --build-id  -o /home/gilles/dht-tcc/dht.ko /home/gilles/dht-tcc/dht.o /home/gilles/dht-tcc/dht.mod.o

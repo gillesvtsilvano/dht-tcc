@@ -12,10 +12,12 @@ int __init init_module(void){
 
 	dev_add_pack(&nbt_pkt_type);
 	nbt_create();
+	printk("NBT module started!\n");
 	return 0;
 }
 
 void cleanup_module(void){
+	printk("NBT module stoped!\n");
 	remove_proc_entry(PROC_NAME, NULL);
 	dev_remove_pack(&nbt_pkt_type);
 	nbt_disassociate();

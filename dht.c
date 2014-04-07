@@ -17,7 +17,7 @@ int __init init_module(){
 	dev_add_pack(&dht_pkt_type);
 
 	dht_create();
-
+	printk("DHT module started!\n");
 	/****** User Code *******/
 
 	strcpy(data, "192.168.0.153\0");
@@ -26,11 +26,12 @@ int __init init_module(){
 	strcpy(data, "192.168.0.1\0");
 	strcpy(key, "ee:ff:aa:dd:33:22\0");
 	dht_insert(myApp, key, strlen(key), data, strlen(data));
-
+	
 	return 0;
 }
 
 void cleanup_module(){
+	printk("DHT module stoped!\n");
 	dev_remove_pack(&dht_pkt_type);
 	remove_proc_entry(PROC_NAME, NULL);
 	nbt_disassociate();
@@ -47,7 +48,7 @@ static struct packet_type dht_pkt_type = {
 int update_task_func(void* data){
 	while(!kthread_should_stop()) {
 		if (t){
-			dht_check();
+			//dht_check();
 		}
 		msleep_interruptible(UPDATE_DELAY);
 	}
@@ -126,7 +127,7 @@ void dht_create(){
 		t = (struct dht_t*) kmalloc(sizeof(struct dht_t*), GFP_KERNEL);
 		t->head = NULL;
 
-		//update_task = kthread_run(update_task_func, NULL, "dht_update_task");
+		update_task = kthread_run(update_task_func, NULL, "dht_update_task");
 	}
 }
 
@@ -271,10 +272,10 @@ static int dht_rcv(struct sk_buff* skb, struct net_device* dev, struct packet_ty
 	
 	switch(rcv_type){
 		case DHT_INSERT_ID:
-			dht_handle_insert(msg);
+			//dht_handle_insert(msg);
 			break;	
 		case DHT_REMOVE_ID:
-			dht_handle_remove(msg);
+			//dht_handle_remove(msg);
 			break;
 		case DHT_RETRIVE_ID:
 			//TODO
@@ -308,7 +309,6 @@ int dht_handle_insert(void* msg){
 	newbie->next = NULL;
 
 	if (!t){
-		printk("dht_handle_insert(): No DHT.\n");
 		return 0;
 	}
 
