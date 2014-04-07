@@ -1,9 +1,5 @@
 #include "dht.h"
 
-struct dht_t* t = NULL;
-
-// Função para a inicialização do módulo
-// Ainda com código de teste
 int __init init_module(){
 	char data[256];
 	char key[256];
@@ -17,35 +13,26 @@ int __init init_module(){
 		return -ENXIO;
 	}
 
+	proc_create(PROC_NAME, 0644, NULL, &dht_proc_fops);
 	dev_add_pack(&dht_pkt_type);
 
 	dht_create();
 
 	/****** User Code *******/
 
-	//char data[6];
-	//int myApp = 10;
-	strcpy(data, "192.168.0.153");
-	strcpy(key, "00:aa:bb:dd:ee:ff");
+	strcpy(data, "192.168.0.153\0");
+	strcpy(key, "00:aa:bb:dd:ee:ff\0");
+	dht_insert(myApp, key, strlen(key), data, strlen(data));	
+	strcpy(data, "192.168.0.1\0");
+	strcpy(key, "ee:ff:aa:dd:33:22\0");
 	dht_insert(myApp, key, strlen(key), data, strlen(data));
-	memset(data, '\0', 256);
-	memset(key, '\0', 256);
-	strcpy(data, "192.168.0.1");
-	strcpy(key, "ee:ff:aa:dd:33:22");
-	dht_insert(myApp, key, strlen(key), data, strlen(data));
-
-	//strcpy(data, "192.168.0.153");
-	//strcpy(key, "00:aa:bb:dd:ee:ff");
-
-	//dht_remove(2, key, strlen(key));
-	//dht_print();
 
 	return 0;
 }
 
-// Função chamada na desativação do módulo
 void cleanup_module(){
 	dev_remove_pack(&dht_pkt_type);
+	remove_proc_entry(PROC_NAME, NULL);
 	nbt_disassociate();
 //	dht_check();
 	dht_destroy();
@@ -61,15 +48,12 @@ int update_task_func(void* data){
 	while(!kthread_should_stop()) {
 		if (t){
 			dht_check();
-			printk("############# DHT ##############\n");
-			dht_print();
-			printk("###############################\n");
 		}
 		msleep_interruptible(UPDATE_DELAY);
 	}
+
 	return 0;
 }
-
 
 void dht_check(void){
 	struct dht_node_t* pt = NULL, *ant = NULL, *target = NULL;
@@ -100,7 +84,6 @@ void dht_check(void){
 			target = NULL;
 
 			pt = t->head;
-			/* ant = NULL; */
 		} else {
 			pt = t->head->next;
 			ant = t->head;
@@ -136,21 +119,17 @@ void dht_check(void){
 	}
 }
 
-
-// Cria uma nova dht
-// Futuramente será possível passar parâmetros para a dht a ser criada
-// É necessário fazer alguns estudos sobre a possibilidade de se ter várias DHT's
 void dht_create(){
 	if (!t){
+		str = (char*) kmalloc(256, GFP_KERNEL);
+		m = (char*) kmalloc(100, GFP_KERNEL);
 		t = (struct dht_t*) kmalloc(sizeof(struct dht_t*), GFP_KERNEL);
 		t->head = NULL;
 
-		update_task = kthread_run(update_task_func, NULL, "dht_update_task");
+		//update_task = kthread_run(update_task_func, NULL, "dht_update_task");
 	}
 }
 
-
-// Remove a dht criada e desaloca toda a estrutura alocada
 void dht_destroy(){
 	struct dht_node_t* pt = NULL, *target = NULL;
 
@@ -176,6 +155,8 @@ void dht_destroy(){
 		target = NULL;
 	};
 
+	kfree(str);
+	kfree(m);
 	kfree(t);
 	t = NULL;
 }
@@ -209,12 +190,14 @@ void dht_craft_msg_insert(uint8_t* dst, uint8_t app, void* key, uint8_t key_size
 	msg->type = DHT_INSERT_ID;
 	msg->app = app;
 	msg->idx = nbt_hash_func(key, key_size);
-	memset(msg->key, '\0', sizeof(msg->key));
-	memcpy(msg->key, key, key_size);
+	//memset(msg->key, 0, sizeof(msg->key));
+	//memcpy(msg->key, key, key_size);
+	strcpy(msg->key, key);
 	msg->key_size = key_size;
 
-	memset(msg->data, '\0', sizeof(msg->data));
-	memcpy(msg->data, data, data_size);
+	//memset(msg->data, 0, sizeof(msg->data));
+	//memcpy(msg->data, data, data_size);
+	strcpy(msg->data, data);
 	msg->data_size = data_size;
 
 	memcpy(p, msg, sizeof(struct dht_msg_insert));
@@ -247,7 +230,7 @@ void dht_craft_msg_remove(uint8_t* dst, uint8_t app, void* key, uint8_t key_size
 	msg->type = DHT_REMOVE_ID;
 	msg->app = app;
 	msg->idx = nbt_hash_func(key, key_size);
-	memset(msg->key, '\0', key_size);
+	memset(msg->key, 0, key_size);
 	memcpy(msg->key, key, key_size);
 	msg->key_size = key_size;
 
@@ -312,13 +295,11 @@ int dht_handle_insert(void* msg){
 	struct dht_msg_insert* ins_msg = NULL;
 
 	ins_msg = msg;
-	//ins_msg = (struct dht_msg_insert * ) kmalloc(sizeof(dht_msg_insert), GFP_KERNEL);
-	//memcpy(ins_msg, msg, sizeof(dht_msg_insert));
 	
 	newbie = (struct dht_node_t*) kmalloc(sizeof(struct dht_node_t), GFP_KERNEL);
 	newbie->app = ins_msg->app;
 	newbie->idx = ins_msg->idx;
-	newbie->key = kmalloc(sizeof(uint8_t) * ins_msg->key_size, GFP_KERNEL);
+	newbie->key = kmalloc(sizeof(uint8_t) * ins_msg->key_size + 1, GFP_KERNEL);
 	memcpy(newbie->key, ins_msg->key, ins_msg->key_size);
 	newbie->key_size = ins_msg->key_size;
 	newbie->data = kmalloc(sizeof(uint8_t) * ins_msg->data_size, GFP_KERNEL);
@@ -473,7 +454,7 @@ int dht_insert(uint8_t app, void* key, uint8_t key_size, void* data, uint8_t dat
 	ant->next = newbie;
 	return 0;
 }
-EXPORT_SYMBOL(dht_insert);
+
 
 int dht_remove(uint8_t app, void* key, uint8_t key_size){
 	struct dht_node_t *pt = NULL, *ant = NULL, *target = NULL;
@@ -521,43 +502,58 @@ int dht_remove(uint8_t app, void* key, uint8_t key_size){
 	}
 	return -1;
 }
-EXPORT_SYMBOL(dht_remove);
 
+static int dht_proc_show(struct seq_file *m, void *v){
+	seq_printf(m, "%s\n", dht_print());
+	return 0;
+}
+
+static int dht_proc_open(struct inode* inode, struct file *file){
+	return single_open(file, dht_proc_show, NULL);
+}
 
 /*
  * Debug functions
  */
-
-void dht_print(){
+char* dht_print(){
 	struct dht_node_t* pt = NULL;
 	
+	strcpy(str, "");
 	if (!t){
-		printk("dht_print(): There is no table to print.\n");
-		return;
+		return str;
 	}
 
 	pt = t->head;
 
 	if (!pt){
-		printk("dht_print(): DHT is empty\n");
-		return;	
+		return str;	
 	}
 
 	while (pt){
 		dht_print_node(pt);
 		pt = pt->next;
 	}
+
+	return str;
 }
-EXPORT_SYMBOL(dht_print);
 
+char* dht_print_node(struct dht_node_t* n){
+	if (!strcmp(str, "")) {
+		sprintf(str, "%u\t%u\t%s\t%s",
+			n->app,
+			n->idx,
+			(char*) n->key,
+			(char*) n->data
+			);
+	} else {
+		sprintf(str, "%s\n%u\t%u\t%s\t%s",
+			str,
+			n->app,
+			n->idx,
+			(char*) n->key,
+			(char*) n->data
+			);
+	}
 
-void dht_print_node(struct dht_node_t* n){
-	printk("%s%u\t%s%u\t%s%s\t%s%u\t%s%s\t%s%u\t%s%s\n",
-			"app: ", n->app,
-			"idx: ", n->idx,  
-			"key: ", (char*) n->key, 
-			"key_size: ", n->key_size,
-			"data : ", (char*) n->data,
-			"data_size: ", n->data_size,
-			"next? ", n->next ? "yes" : "no");
+	return str;
 }

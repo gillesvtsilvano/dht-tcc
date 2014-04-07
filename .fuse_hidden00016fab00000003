@@ -8,11 +8,6 @@
 #include <linux/pkt_sched.h>
 #include <linux/kthread.h>
 #include <asm/errno.h>
-#include <linux/fs.h>
-#include <linux/proc_fs.h>
-#include <linux/seq_file.h>
-#include <asm/uaccess.h>
-
 
 #ifndef _DHT_H_
 #define _DHT_H_
@@ -21,8 +16,6 @@
 #define DHT_MODULE_AUTHOR "Gilles V. T. Silvano <gillesvtsilvano@gmail.com"
 #define DHT_MODULE_DESC   "TODO"
 
-
-#define PROC_NAME "dht"
 #define PROTO_TYPE 0x0808
 #define DHT_INSERT_ID 0x01
 #define DHT_REMOVE_ID 0x02
@@ -34,9 +27,6 @@
 #define DHT_NONE_ID 0x09
 
 #define UPDATE_DELAY 10000
-
-char* str = NULL;
-char* m = NULL;
 
 // Outdated
 uint16_t seq;
@@ -136,21 +126,9 @@ int update_task_func(void* data);
 
 static int dht_rcv(struct sk_buff* skb, struct net_device* dev, struct packet_type *dht_pkt_type, struct net_device* orig);
 
-
-static int dht_proc_show(struct seq_file *m, void *v);
-
-static int dht_proc_open(struct inode* inode, struct file *file);
-
-static const struct file_operations dht_proc_fops = {
-	.open 	= dht_proc_open,
-	.read 	= seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
 // Debug functions
-char* dht_print(void);
-char* dht_print_node(struct dht_node_t*);
+void dht_print(void);
+void dht_print_node(struct dht_node_t*);
 
 
 /* Nbt functions defined at nbt.h */
@@ -169,10 +147,6 @@ extern void nbt_disassociate(void);
 extern void nbt_update(void);
 extern int maccmp(uint8_t* mac1, uint8_t* mac2);
 
-
-/*
- * Exports
- */
 EXPORT_SYMBOL(dht_insert);
 EXPORT_SYMBOL(dht_remove);
 
